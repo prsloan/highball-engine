@@ -5,8 +5,8 @@ in Wine 11.19), which neither the CrossOver 26.3 tree nor Wine 11.18 carries; th
 dlls/ws2_32/tests is left out. Without it WSAIoctl() answers SIO_UDP_NETRESET with WSAEOPNOTSUPP (10045).
 
 Forza Horizon 6 sets SIO_UDP_CONNRESET and SIO_UDP_NETRESET on its UDP game socket right before
-matchmaking (see 0059). With both patches the test program in 0059 passes all 23 checks on
-arm64-kk-wine11.18-r4, where it fails 9 without them. The Intel line's 0035 is the same backport.
+matchmaking (see 0059). With both patches the test program in 0059 passes all 26 checks on
+arm64-kk-wine11.18-r4, where it fails 12 without them. The Intel line's 0035 is the same backport.
 
 diff --git a/dlls/ws2_32/socket.c b/dlls/ws2_32/socket.c
 index b2601c6..b398d80 100644
