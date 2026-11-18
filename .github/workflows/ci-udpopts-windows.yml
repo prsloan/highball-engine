@@ -1,0 +1,65 @@
+# CI test only (PR #40 review, not for merge): tests/dualstack-udp/udpopts.c on real Windows, built and run the way
+# x64-fidelity.yml runs its tests. Built once with the pinned llvm-mingw (x86-64 and aarch64), then run on Windows
+# Server 2022 and 2025 (x86-64) and Windows 11 ARM64 (the arm64 build natively and the x86-64 one emulated).
+name: ci-udpopts-windows
+on:
+  push:
+    branches: [ci-windows-udpopts]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: llvm-mingw
+        run: |
+          set -eu
+          curl -sSL --retry 3 -o llvm-mingw.tar.xz https://github.com/mstorsjo/llvm-mingw/releases/download/20260922/llvm-mingw-20260922-ucrt-ubuntu-22.04-x86_64.tar.xz
+          echo "bb7bb7654b33d5aa8712acb837c963b2e0c56352560c76105270a3268c665c21  llvm-mingw.tar.xz" | sha256sum -c -
+          mkdir llvm-mingw && tar -xJf llvm-mingw.tar.xz -C llvm-mingw --strip-components 1
+      - name: build
+        run: |
+          set -eu
+          mkdir out
+          llvm-mingw/bin/x86_64-w64-mingw32-clang --version | head -1
+          llvm-mingw/bin/x86_64-w64-mingw32-clang -O2 -Wall -Wextra -Werror tests/dualstack-udp/udpopts.c -lws2_32 -o out/udpopts.exe
+          llvm-mingw/bin/aarch64-w64-mingw32-clang -O2 -Wall -Wextra -Werror tests/dualstack-udp/udpopts.c -lws2_32 -o out/udpopts-arm64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: udpopts-exe
+          path: out/*.exe
+          retention-days: 30
+  run:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: udpopts-exe
+          path: exe
+      - name: run
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path results | Out-Null
+          [System.Environment]::OSVersion.VersionString | Out-File results/os.txt
+          $progs = @('udpopts')
+          if ('${{ matrix.os }}' -eq 'windows-11-arm') { $progs += 'udpopts-arm64' }
+          foreach ($t in $progs) {
+            $out = "results/$t.txt"
+            $p = Start-Process -FilePath "exe/$t.exe" -NoNewWindow -PassThru -RedirectStandardOutput $out -RedirectStandardError "results/$t.err"
+            if (-not $p.WaitForExit(120000)) { $p.Kill(); "TIMEOUT" | Out-File -Append $out }
+            "exit $($p.ExitCode)" | Out-File -Append $out
+            Write-Output "== $t"
+            Get-Content $out
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: udpopts-${{ matrix.os }}
+          path: results/
+          retention-days: 30
